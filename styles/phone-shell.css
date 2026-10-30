@@ -1455,3 +1455,20 @@
 .folder-dots .dot.active {
   background: color-mix(in srgb, var(--c-home-label, #ffffff) 85%, transparent);
 }
+
+/* Float native Android WebView owns its OS status bar. No duplicate virtual bar
+   or hard-coded 48px top safe area. Keep browser/PWA layouts unchanged. */
+@media (max-width: 500px) and (hover: none) and (pointer: coarse) {
+  html[data-float-shell="1"] .phone-shell {
+    --safe-area-top: 0px;
+    --phone-titlebar-safe-top: 0px;
+    --page-header-safe-top: 0px;
+    --home-grid-top-offset: 16px;
+  }
+  html[data-float-shell="1"] .phone-shell > .phone-status-bar {
+    display: none !important;
+  }
+  html[data-float-shell="1"] .phone-shell-wrap {
+    margin-top: 0 !important;
+  }
+}

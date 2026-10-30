@@ -5,6 +5,7 @@ import { ChatPluginBootstrap } from "@/components/chat-plugin-bootstrap";
 import { ChatReasoningVisibilityController } from "@/components/chat-reasoning-visibility-controller";
 import { CSSImportEnhancer } from "@/components/css-import-enhancer";
 import { PWAManifestInjector } from "@/components/pwa-manifest-injector";
+import { ShellPersonalPushSync } from "@/components/shell-personal-push-sync";
 import { PWARegistrar } from "@/components/pwa-registrar";
 import "../styles/fonts.css";
 import "./globals.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
       </head>
       <body>
         <PWAManifestInjector />
+        <ShellPersonalPushSync />
         <PWARegistrar />
         <CSSImportEnhancer />
         <ChatPluginBootstrap />

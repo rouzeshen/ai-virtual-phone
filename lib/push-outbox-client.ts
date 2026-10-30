@@ -89,6 +89,10 @@ export async function consumeServerOutbox(options?: { silent?: boolean; force?: 
                         continue;
                     }
                     const meta = entry.meta || {};
+                    if ((meta as { kind?: string }).kind === "shell_test") {
+                        consumedIds.push(entry.id);
+                        continue;
+                    }
 
                     if ((meta as { kind?: string }).kind === "bridge") {
                         const bridgeMeta = meta as Record<string, unknown> & {

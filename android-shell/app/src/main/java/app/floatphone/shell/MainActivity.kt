@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
-        const val VERSION = "1.0.0"
+        const val VERSION = "1.1.0"
         /** 来电接听等场景的站内深链（必须以 SITE_URL 开头，否则忽略） */
         const val EXTRA_OPEN_URL = "open_url"
     }
@@ -220,6 +220,44 @@ class MainActivity : AppCompatActivity() {
     inner class ShellBridge {
         @JavascriptInterface
         fun getVersion(): String = VERSION
+
+        /** The user-owned personal Supabase configuration, sent by the trusted Float UI. */
+        @JavascriptInterface
+        fun configurePersonalPush(json: String) {
+            // JavascriptInterface calls run on WebView's bridge thread.
+            runOnUiThread {
+                val current = Uri.parse(webView.url.orEmpty())
+                val trusted = Uri.parse(SITE_URL)
+                if (current.scheme != trusted.scheme || current.host != trusted.host ||
+                    current.port != trusted.port) return@runOnUiThread
+                PersonalCloudPush.configure(this@MainActivity, json)
+                PushService.start(this@MainActivity)
+            }
+        }
+
+        @JavascriptInterface
+        fun isPersonalPushRegistered(): Boolean = PersonalCloudPush.registered(this@MainActivity)
+
+        @JavascriptInterface
+        fun isPersonalPushEnabled(): Boolean = PersonalCloudPush.enabled(this@MainActivity)
+
+        @JavascriptInterface
+        fun setPersonalPushEnabled(enabled: Boolean) {
+            PersonalCloudPush.setEnabled(this@MainActivity, enabled)
+            runOnUiThread { PushService.start(this@MainActivity) }
+        }
+
+        @JavascriptInterface
+        fun testPersonalPush(): Boolean {
+            if (!PersonalCloudPush.enabled(this@MainActivity) ||
+                PersonalCloudPush.load(this@MainActivity) == null) return false
+            runOnUiThread {
+                startService(Intent(this@MainActivity, PushService::class.java).apply {
+                    action = "personal_push_test"
+                })
+            }
+            return true
+        }
 
         /** 打开本应用的系统设置页（引导用户关电池限制、开自启动）。 */
         @JavascriptInterface

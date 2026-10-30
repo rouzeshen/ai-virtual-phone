@@ -38,10 +38,8 @@ class PushService : Service() {
         private const val CH_MESSAGES = "shell_messages"
         private const val CH_CALLS = "shell_calls"
         private const val NOTIF_FG_ID = 1
-        private var running = false
 
         fun start(context: Context) {
-            if (running) return
             val intent = Intent(context, PushService::class.java)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
             else context.startService(intent)
@@ -53,8 +51,9 @@ class PushService : Service() {
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
+    private var connectionThread: Thread? = null
     private var socket: WebSocket? = null
-    private var stopped = false
+    @Volatile private var stopped = false
     private var msgSeq = 2
     private var notifId = 100
     private var shellSubRegistered = false
@@ -63,18 +62,29 @@ class PushService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        running = true
         createChannels()
         startForeground(NOTIF_FG_ID, buildKeepAliveNotification("等待连接…"))
-        thread(name = "shell-push-loop") { connectionLoop() }
+        connectionThread = thread(name = "shell-push-loop") { connectionLoop() }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "personal_push_test") {
+            thread(name = "shell-cloud-test") {
+                sleepSec(6)
+                val cfg = PersonalCloudPush.load(this)
+                if (cfg != null && !runCatching { PersonalCloudPush.postTest(this, cfg) }.getOrDefault(false)) {
+                    showMessageNotification("Float", "个人云测试发送失败，请检查网络与配置")
+                }
+            }
+        }
+        connectionThread?.interrupt()
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         stopped = true
-        running = false
         socket?.cancel()
+        connectionThread?.interrupt()
         super.onDestroy()
     }
 
@@ -82,6 +92,22 @@ class PushService : Service() {
     private fun connectionLoop() {
         var backoffSec = 5L
         while (!stopped) {
+            val personal = PersonalCloudPush.load(this)
+            if (personal != null) {
+                if (!PersonalCloudPush.enabled(this)) {
+                    updateKeepAlive("个人云通知已暂停")
+                    sleepSec(15)
+                    continue
+                }
+                val ok = runCatching {
+                    PersonalCloudPush.poll(this, personal) { title, body ->
+                        showMessageNotification(title, body)
+                    }
+                }.getOrDefault(false)
+                updateKeepAlive(if (ok) "已连接个人云，等待角色消息" else "个人云连接失败，重试中…")
+                sleepSec(if (ok) 15 else 25)
+                continue
+            }
             val config = fetchConfig()
             if (config == null) {
                 updateKeepAlive("未登录或站点不可达，稍后重试")
@@ -237,7 +263,9 @@ class PushService : Service() {
             listener,
         )
         synchronized(lock) {
-            while (!done && !stopped) runCatching { lock.wait(30_000) }
+            while (!done && !stopped && PersonalCloudPush.load(this) == null) {
+                runCatching { lock.wait(30_000) }
+            }
         }
         socket?.cancel()
         socket = null

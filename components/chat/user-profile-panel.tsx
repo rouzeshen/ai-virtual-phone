@@ -1173,6 +1173,7 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
     const [offlinePushState, setOfflinePushState] = useState<OfflinePushState>("unsupported");
     const [isShellApp, setIsShellApp] = useState(false);
+    const [shellPushEnabled, setShellPushEnabled] = useState(true);
     const [offlinePushBusy, setOfflinePushBusy] = useState(false);
     const [offlinePushHint, setOfflinePushHint] = useState<string | null>(null);
     const [personalCloudActive, setPersonalCloudActive] = useState(false);
@@ -1217,6 +1218,8 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
 
     useEffect(() => {
         setIsShellApp(isShellEnvironment());
+        const bridge = (window as Window & { AndroidShell?: { isPersonalPushEnabled?: () => boolean } }).AndroidShell;
+        if (bridge?.isPersonalPushEnabled) setShellPushEnabled(bridge.isPersonalPushEnabled());
         setPersonalCloudActive(isPersonalPushCloudActive());
         void getOfflinePushState().then(setOfflinePushState);
         refreshTimedSchedules();
@@ -1248,6 +1251,13 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
 
     const handleOfflinePushTest = async () => {
         if (offlinePushBusy) return;
+        if (isShellApp) {
+            const bridge = (window as Window & { AndroidShell?: { testPersonalPush?: () => boolean } }).AndroidShell;
+            setOfflinePushHint(bridge?.testPersonalPush?.()
+                ? "已预约个人云端到端测试：切到后台后等待新通知。"
+                : "未连接个人云或本设备通知已暂停，请检查部署状态。");
+            return;
+        }
         setOfflinePushBusy(true);
         setOfflinePushHint("已安排测试推送：现在就杀掉后台，约 6 秒后送达。");
         try {
@@ -1410,13 +1420,19 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                                     <span className="menu-desc">关掉后台后仍由系统推送通知（本设备）</span>
                                 </div>
                                 <div className="menu-right flex items-center gap-2">
-                                    {(offlinePushState === "on" || isShellApp) && (
+                                    {(offlinePushState === "on" || (isShellApp && shellPushEnabled)) && (
                                         <button className="ui-btn ui-btn-outline py-1 px-2 ts-11" style={{ whiteSpace: "nowrap" }} onClick={() => void handleOfflinePushTest()} disabled={offlinePushBusy}>测试</button>
                                     )}
                                     <Toggle
-                                        checked={offlinePushState === "on" || isShellApp}
-                                        disabled={offlinePushBusy || isShellApp || offlinePushState === "unsupported"}
-                                        onChange={enabled => void handleOfflinePushToggle(enabled)}
+                                        checked={isShellApp ? shellPushEnabled : offlinePushState === "on"}
+                                        disabled={offlinePushBusy || (!isShellApp && offlinePushState === "unsupported")}
+                                        onChange={enabled => {
+                                            if (isShellApp) {
+                                                const bridge = (window as Window & { AndroidShell?: { setPersonalPushEnabled?: (enabled: boolean) => void } }).AndroidShell;
+                                                bridge?.setPersonalPushEnabled?.(enabled);
+                                                setShellPushEnabled(enabled);
+                                            } else void handleOfflinePushToggle(enabled);
+                                        }}
                                     />
                                 </div>
                             </div>
@@ -1456,7 +1472,7 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                         </div>
                         <p className="menu-group-desc mx-2">
                             {offlinePushHint || (isShellApp
-                                ? "App 版自带推送通道，已自动接管离线推送；保持系统通知权限开启即可，可点「测试」验证。"
+                                ? "App 版使用个人云原生通知，可直接开关；先部署个人云，再点「测试」验证。"
                                 : offlinePushState === "unsupported" ? "当前环境不支持。iOS 请先添加到主屏幕，从主屏幕打开后再开启。" : "")}
                         </p>
                     </>

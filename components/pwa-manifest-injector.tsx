@@ -7,6 +7,9 @@ import { getRuntimePwaDisplayMode, readPwaDisplayPreference, PWA_DISPLAY_MODE_CH
 export function PWAManifestInjector() {
   useEffect(() => {
     const root = document.documentElement;
+    // Native WebView already sits BELOW Android's real status bar; it must
+    // never render a second simulated island or reserve another 48px.
+    if (/FloatShell\//.test(navigator.userAgent)) root.dataset.floatShell = "1";
     const displayModeQueries = ["fullscreen", "standalone", "minimal-ui"].map(mode => (
       window.matchMedia(`(display-mode: ${mode})`)
     ));
